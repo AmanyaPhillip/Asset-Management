@@ -1,10 +1,10 @@
 // =====================================================
-// PART 3: Booking Success Page
+// Updated Booking Success Page - WhatsApp
 // File: src/app/booking-success/page.tsx
 // =====================================================
 
 import { supabaseAdmin } from '@/lib/supabase/client'
-import { CheckCircle, Calendar, MapPin, Car, Building2 } from 'lucide-react'
+import { CheckCircle, Calendar, MapPin, Car, Building2, MessageSquare } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
@@ -18,7 +18,7 @@ async function getBookingDetails(sessionId: string) {
       *,
       properties (title, address, city, state),
       vehicles (make, model),
-      payments (amount, receipt_url)
+      payments (amount)
     `)
     .eq('stripe_checkout_session_id', sessionId)
     .single()
@@ -97,11 +97,18 @@ export default async function BookingSuccessPage({
           <div className="border-t pt-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-gray-600">Booking ID</span>
-              <span className="font-mono text-sm">{booking.id}</span>
+              <span className="font-mono text-sm">{booking.id.slice(0, 8)}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-gray-600">Guest Name</span>
               <span className="font-medium">{booking.guest_name}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-gray-600">WhatsApp Number</span>
+              <span className="font-medium flex items-center gap-1">
+                <MessageSquare className="w-4 h-4 text-green-600" />
+                {booking.guest_phone}
+              </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-gray-600">Check-in</span>
@@ -133,26 +140,84 @@ export default async function BookingSuccessPage({
             </div>
           </div>
 
-          {/* Confirmation sent message */}
+          {/* WhatsApp Confirmation */}
+          <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+            <div className="flex items-start gap-3">
+              <MessageSquare className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-green-900 mb-1">
+                  WhatsApp Confirmation Sent!
+                </p>
+                <p className="text-xs text-green-800">
+                  A confirmation message with your booking details and dashboard access link has been sent to{' '}
+                  <span className="font-medium">{booking.guest_phone}</span>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Important Info */}
           <div className="bg-blue-50 p-4 rounded-lg">
-            <p className="text-sm text-blue-900">
-              📧 A confirmation email has been sent to{' '}
-              <span className="font-medium">{booking.guest_email}</span>
+            <p className="text-sm text-blue-900 font-medium mb-2">
+              📱 Important Information:
             </p>
+            <ul className="text-xs text-blue-800 space-y-1 ml-4">
+              <li>• Check your WhatsApp for booking confirmation</li>
+              <li>• You'll receive a dashboard link to view your booking anytime</li>
+              <li>• Save this link for future access to your bookings</li>
+              <li>• Contact us via WhatsApp if you need assistance</li>
+            </ul>
           </div>
 
           {/* Actions */}
           <div className="flex gap-4 pt-4">
-            <Link href="/bookings" className="flex-1">
-              <Button className="w-full" variant="outline">
-                View My Bookings
+            <Link href="/login" className="flex-1">
+              <Button className="w-full bg-green-600 hover:bg-green-700">
+                <MessageSquare className="w-4 h-4 mr-2" />
+                Access Dashboard
               </Button>
             </Link>
             <Link href="/" className="flex-1">
-              <Button className="w-full bg-blue-600 hover:bg-blue-700">
+              <Button className="w-full" variant="outline">
                 Back to Home
               </Button>
             </Link>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Additional Info Card */}
+      <Card className="mt-6">
+        <CardContent className="p-6">
+          <h3 className="font-semibold mb-3 flex items-center gap-2">
+            <MessageSquare className="w-5 h-5 text-green-600" />
+            How to Access Your Booking
+          </h3>
+          <div className="space-y-3 text-sm text-gray-600">
+            <div className="flex items-start gap-3">
+              <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0 text-green-600 font-bold text-xs">
+                1
+              </div>
+              <p>Check your WhatsApp for the confirmation message</p>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0 text-green-600 font-bold text-xs">
+                2
+              </div>
+              <p>Click the dashboard link sent to you</p>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0 text-green-600 font-bold text-xs">
+                3
+              </div>
+              <p>View all your bookings and manage your reservations</p>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0 text-green-600 font-bold text-xs">
+                4
+              </div>
+              <p>Request a new link anytime using your WhatsApp number</p>
+            </div>
           </div>
         </CardContent>
       </Card>

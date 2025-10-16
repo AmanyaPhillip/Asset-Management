@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { supabaseAdmin } from '@/lib/supabase/client'
+import { sendBookingConfirmation } from '@/lib/whatsapp/client'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2025-09-30.clover',
@@ -111,6 +112,16 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     }))
 
     await supabaseAdmin.from('notifications').insert(notifications)
+  }
+
+  // Send WhatsApp confirmation
+  if (booking.guest_phone) {
+    await sendBookingConfirmation(booking.guest_phone, {
+      assetName: assetName,
+      startDate: booking.start_date,
+      endDate: booking.end_date,
+      amount: booking.total_amount
+    })
   }
 
   console.log(`Booking ${bookingId} confirmed successfully`)

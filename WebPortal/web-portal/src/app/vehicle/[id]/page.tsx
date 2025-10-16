@@ -1,5 +1,5 @@
 // =====================================================
-// PART 4: Vehicle Detail Page
+// PART 4: Vehicle Detail Page (FIXED)
 // File: src/app/vehicle/[id]/page.tsx
 // =====================================================
 
@@ -31,9 +31,11 @@ async function getVehicle(id: string): Promise<Vehicle | null> {
 export default async function VehicleDetailPage({
   params,
 }: {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }) {
-  const vehicle = await getVehicle(params.id)
+  // ✅ CORRECT: Await params before accessing properties
+  const { id } = await params
+  const vehicle = await getVehicle(id)
 
   if (!vehicle) {
     notFound()

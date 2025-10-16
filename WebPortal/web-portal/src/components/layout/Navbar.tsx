@@ -1,6 +1,6 @@
 // =====================================================
-// PART 3: Updated Navbar with Auth
-// File: src/components/layout/Navbar.tsx (UPDATE)
+// Updated Navbar - WhatsApp Auth
+// File: src/components/layout/Navbar.tsx
 // =====================================================
 
 'use client'
@@ -14,7 +14,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Home, Building2, Car, BookOpen, User, LogOut } from 'lucide-react'
+import { Home, Building2, Car, BookOpen, User, LogOut, MessageSquare, Phone } from 'lucide-react'
 
 export default function Navbar() {
   const { user, signOut } = useAuth()
@@ -27,7 +27,7 @@ export default function Navbar() {
             <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
               <Home className="w-6 h-6 text-white" />
             </div>
-            <span className="font-semibold text-xl hidden sm:block">Davidzo's Rental's</span>
+            <span className="font-semibold text-xl hidden sm:block">Davidzo's Rentals</span>
           </Link>
 
           <div className="hidden md:flex space-x-8">
@@ -52,13 +52,23 @@ export default function Navbar() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="flex items-center space-x-2">
-                    <User className="w-4 h-4" />
-                    <span className="hidden sm:inline">Account</span>
+                    <Phone className="w-4 h-4 text-green-600" />
+                    <span className="hidden sm:inline">
+                      {user.full_name || user.phone_number}
+                    </span>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
+                <DropdownMenuContent align="end" className="w-56">
+                  <div className="px-2 py-2 border-b">
+                    <p className="text-sm font-medium">{user.full_name}</p>
+                    <p className="text-xs text-gray-500 flex items-center gap-1">
+                      <MessageSquare className="w-3 h-3 text-green-600" />
+                      {user.phone_number}
+                    </p>
+                  </div>
                   <DropdownMenuItem asChild>
                     <Link href="/bookings" className="w-full cursor-pointer">
+                      <BookOpen className="w-4 h-4 mr-2" />
                       My Bookings
                     </Link>
                   </DropdownMenuItem>
@@ -73,9 +83,9 @@ export default function Navbar() {
               </DropdownMenu>
             ) : (
               <Link href="/login">
-                <Button className="bg-blue-600 hover:bg-blue-700">
-                  <User className="w-4 h-4 mr-2" />
-                  Login
+                <Button className="bg-green-600 hover:bg-green-700">
+                  <MessageSquare className="w-4 h-4 mr-2" />
+                  Login with WhatsApp
                 </Button>
               </Link>
             )}

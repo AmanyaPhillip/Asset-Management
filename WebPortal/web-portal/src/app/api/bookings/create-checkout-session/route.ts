@@ -1,11 +1,12 @@
 // =====================================================
-// PART 1: Stripe Checkout Session API
+// Updated Checkout Session API - WhatsApp Only
 // File: src/app/api/bookings/create-checkout-session/route.ts
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { supabaseAdmin } from '@/lib/supabase/client'
+import { whatsappService } from '@/lib/whatsapp/service'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2025-09-30.clover',
@@ -20,13 +21,12 @@ export async function POST(req: NextRequest) {
       startDate,
       endDate,
       guestName,
-      guestEmail,
-      guestPhone,
+      guestPhone, // This is now the WhatsApp number
       totalAmount,
     } = body
 
     // Validate required fields
-    if (!assetId || !assetType || !startDate || !endDate || !guestName || !guestEmail) {
+    if (!assetId || !assetType || !startDate || !endDate || !guestName || !guestPhone) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
@@ -48,46 +48,39 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Get or create user
+    // Get or create user by phone number
     let userId: string | null = null
     
     const { data: existingUser } = await supabaseAdmin
       .from('users')
-      .select('id')
-      .eq('email', guestEmail)
+      .select('id, phone_verified')
+      .eq('phone_number', guestPhone)
       .single()
 
     if (existingUser) {
       userId = existingUser.id
     } else {
-      // Create a placeholder user (they can claim account later)
-      const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
-        email: guestEmail,
-        email_confirm: true,
-        user_metadata: {
+      // Create new user with phone number
+      const { data: newUser, error: userError } = await supabaseAdmin
+        .from('users')
+        .insert({
+          phone_number: guestPhone,
           full_name: guestName,
-          phone: guestPhone,
-        },
-      })
+          role: 'customer',
+          phone_verified: false, // Will be verified via OTP later
+        })
+        .select()
+        .single()
 
-      if (authError) {
-        console.error('Error creating auth user:', authError)
+      if (userError) {
+        console.error('Error creating user:', userError)
         return NextResponse.json(
           { error: 'Failed to create user account' },
           { status: 500 }
         )
       }
 
-      userId = authUser.user.id
-
-      // Create user profile
-      await supabaseAdmin.from('users').insert({
-        id: userId,
-        email: guestEmail,
-        full_name: guestName,
-        phone: guestPhone,
-        role: 'customer',
-      })
+      userId = newUser.id
     }
 
     // Create pending booking
@@ -102,7 +95,6 @@ export async function POST(req: NextRequest) {
         total_amount: totalAmount,
         status: 'pending',
         guest_name: guestName,
-        guest_email: guestEmail,
         guest_phone: guestPhone,
       })
       .select()
@@ -138,7 +130,7 @@ export async function POST(req: NextRequest) {
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       payment_method_types: ['card'],
-      customer_email: guestEmail,
+      customer_phone: guestPhone, // Use phone instead of email
       line_items: [
         {
           price_data: {
@@ -157,6 +149,7 @@ export async function POST(req: NextRequest) {
         asset_type: assetType,
         asset_id: assetId,
         user_id: userId,
+        phone_number: guestPhone,
       },
       success_url: `${process.env.NEXT_PUBLIC_APP_URL}/booking-success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/${assetType}/${assetId}`,
@@ -167,6 +160,33 @@ export async function POST(req: NextRequest) {
       .from('bookings')
       .update({ stripe_checkout_session_id: session.id })
       .eq('id', booking.id)
+
+    // Send initial WhatsApp notification (booking created, pending payment)
+    try {
+      const pendingMessage = `📋 *Booking Created*
+
+${assetName}
+
+📅 ${new Date(startDate).toLocaleDateString()} - ${new Date(endDate).toLocaleDateString()}
+💰 Total: $${totalAmount.toFixed(2)}
+
+⏳ Please complete your payment to confirm the booking.
+
+Booking ID: ${booking.id.slice(0, 8)}
+
+Davidzo's Rentals`
+
+      await whatsappService.sendMessage(
+        guestPhone,
+        pendingMessage,
+        'booking_pending',
+        userId,
+        booking.id
+      )
+    } catch (whatsappError) {
+      console.error('WhatsApp notification error (non-critical):', whatsappError)
+      // Don't fail the booking if WhatsApp fails
+    }
 
     return NextResponse.json({
       checkoutUrl: session.url,
@@ -180,6 +200,3 @@ export async function POST(req: NextRequest) {
     )
   }
 }
-
-
-

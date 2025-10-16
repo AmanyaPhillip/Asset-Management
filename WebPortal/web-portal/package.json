@@ -29,7 +29,8 @@
     "react-dom": "19.1.0",
     "sonner": "^2.0.7",
     "stripe": "^19.1.0",
-    "tailwind-merge": "^3.3.1"
+    "tailwind-merge": "^3.3.1",
+    "twilio": "^5.10.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

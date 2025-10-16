@@ -1,5 +1,5 @@
 // =====================================================
-// PART 1: Property Detail Page
+// PART 1: Property Detail Page (FIXED)
 // File: src/app/property/[id]/page.tsx
 // =====================================================
 
@@ -30,9 +30,11 @@ async function getProperty(id: string): Promise<Property | null> {
 export default async function PropertyDetailPage({
   params,
 }: {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }) {
-  const property = await getProperty(params.id)
+  // ✅ CORRECT: Await params before accessing properties
+  const { id } = await params
+  const property = await getProperty(id)
 
   if (!property) {
     notFound()
@@ -124,6 +126,3 @@ export default async function PropertyDetailPage({
     </div>
   )
 }
-
-
-
