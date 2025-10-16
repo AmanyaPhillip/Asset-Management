@@ -1,8 +1,3 @@
-// =====================================================
-// Updated Booking Form Component - WhatsApp Only
-// File: src/components/booking/BookingForm.tsx
-// =====================================================
-
 'use client'
 
 import { useState } from 'react'
@@ -13,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Calendar as CalendarIcon, Loader2, MessageSquare, Phone } from 'lucide-react'
+import { Calendar as CalendarIcon, Loader2, MessageSquare, Phone, Mail } from 'lucide-react'
 import { format, differenceInDays } from 'date-fns'
 import { cn } from '@/lib/utils'
 
@@ -37,6 +32,7 @@ export default function BookingForm({
   const [endDate, setEndDate] = useState<Date>()
   const [guestName, setGuestName] = useState('')
   const [guestPhone, setGuestPhone] = useState('')
+  const [guestEmail, setGuestEmail] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -45,10 +41,7 @@ export default function BookingForm({
   const total = subtotal + cleaningFee
 
   const formatPhoneInput = (value: string) => {
-    // Remove all non-digits
     const cleaned = value.replace(/\D/g, '')
-    
-    // Format as user types
     if (cleaned.length <= 3) return cleaned
     if (cleaned.length <= 6) return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3)}`
     return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6, 10)}`
@@ -57,6 +50,34 @@ export default function BookingForm({
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const formatted = formatPhoneInput(e.target.value)
     setGuestPhone(formatted)
+  }
+
+  const validateContact = () => {
+    // At least one contact method must be provided
+    if (!guestPhone && !guestEmail) {
+      setError('Please provide either a phone number or email address')
+      return false
+    }
+
+    // Validate phone if provided
+    if (guestPhone) {
+      const cleanedPhone = guestPhone.replace(/\D/g, '')
+      if (cleanedPhone.length < 10) {
+        setError('Please enter a valid 10-digit phone number')
+        return false
+      }
+    }
+
+    // Validate email if provided
+    if (guestEmail) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(guestEmail)) {
+        setError('Please enter a valid email address')
+        return false
+      }
+    }
+
+    return true
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -73,20 +94,21 @@ export default function BookingForm({
       return
     }
 
-    if (!guestName || !guestPhone) {
-      setError('Please fill in all required fields')
+    if (!guestName) {
+      setError('Please enter your name')
       return
     }
 
-    // Validate phone number format
-    const cleanedPhone = guestPhone.replace(/\D/g, '')
-    if (cleanedPhone.length < 10) {
-      setError('Please enter a valid phone number')
+    if (!validateContact()) {
       return
     }
 
-    // Convert to E.164 format (add +1 for US/Canada)
-    const formattedPhone = `+1${cleanedPhone}`
+    // Format phone to E.164 if provided
+    let formattedPhone = null
+    if (guestPhone) {
+      const cleanedPhone = guestPhone.replace(/\D/g, '')
+      formattedPhone = `+1${cleanedPhone}`
+    }
 
     setIsLoading(true)
 
@@ -101,6 +123,7 @@ export default function BookingForm({
           endDate: endDate.toISOString(),
           guestName,
           guestPhone: formattedPhone,
+          guestEmail: guestEmail || null,
           totalAmount: total,
         }),
       })
@@ -111,7 +134,6 @@ export default function BookingForm({
         throw new Error(data.error || 'Failed to create booking')
       }
 
-      // Redirect to Stripe Checkout
       window.location.href = data.checkoutUrl
     } catch (err: any) {
       setError(err.message || 'An error occurred')
@@ -189,7 +211,7 @@ export default function BookingForm({
             </div>
           </div>
 
-          {/* Guest Information */}
+          {/* Guest Name */}
           <div>
             <Label htmlFor="guestName">Full Name *</Label>
             <Input
@@ -201,24 +223,50 @@ export default function BookingForm({
             />
           </div>
 
-          <div>
-            <Label htmlFor="guestPhone">WhatsApp Number *</Label>
-            <div className="relative">
-              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <Input
-                id="guestPhone"
-                type="tel"
-                value={guestPhone}
-                onChange={handlePhoneChange}
-                placeholder="(555) 123-4567"
-                className="pl-10"
-                required
-              />
-            </div>
-            <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-              <MessageSquare className="w-3 h-3 text-green-600" />
-              Confirmation will be sent via WhatsApp
+          {/* Contact Information Header */}
+          <div className="pt-2">
+            <Label className="text-sm font-semibold">
+              Contact Information *
+            </Label>
+            <p className="text-xs text-gray-500 mt-1">
+              Provide at least one contact method
             </p>
+          </div>
+
+          {/* Email */}
+          <div>
+            <Label htmlFor="guestEmail" className="flex items-center gap-2">
+              <Mail className="w-4 h-4 text-gray-400" />
+              Email Address
+            </Label>
+            <Input
+              id="guestEmail"
+              type="email"
+              value={guestEmail}
+              onChange={(e) => setGuestEmail(e.target.value)}
+              placeholder="john@example.com"
+            />
+          </div>
+
+          {/* Phone */}
+          <div>
+            <Label htmlFor="guestPhone" className="flex items-center gap-2">
+              <Phone className="w-4 h-4 text-gray-400" />
+              Phone Number
+            </Label>
+            <Input
+              id="guestPhone"
+              type="tel"
+              value={guestPhone}
+              onChange={handlePhoneChange}
+              placeholder="(555) 123-4567"
+            />
+            {guestPhone && (
+              <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                <MessageSquare className="w-3 h-3 text-green-600" />
+                WhatsApp notifications available
+              </p>
+            )}
           </div>
 
           {/* Price Breakdown */}
@@ -260,15 +308,16 @@ export default function BookingForm({
                 Processing...
               </>
             ) : (
-              <>
-                <MessageSquare className="mr-2 h-4 w-4" />
-                Reserve & Pay
-              </>
+              'Reserve & Pay'
             )}
           </Button>
 
           <div className="text-xs text-center text-gray-500 mt-2">
-            You'll receive instant confirmation via WhatsApp
+            {guestPhone && guestEmail
+              ? 'Confirmation will be sent via email and WhatsApp'
+              : guestPhone
+              ? 'Confirmation will be sent via WhatsApp'
+              : 'Confirmation will be sent via email'}
           </div>
         </form>
       </CardContent>
