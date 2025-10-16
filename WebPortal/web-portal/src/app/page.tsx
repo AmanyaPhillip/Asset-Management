@@ -49,7 +49,7 @@ export default async function HomePage() {
             </p>
             <div className="flex gap-4 justify-center">
               <Link href="/properties">
-                <Button size="lg" className="bg-white text-blue-600 hover:bg-gray-100">
+                <Button size="lg" variant="outline" className="text-blue-600 border-white hover:bg-blue-700">
                   <Building2 className="w-5 h-5 mr-2" />
                   Browse Properties
                 </Button>

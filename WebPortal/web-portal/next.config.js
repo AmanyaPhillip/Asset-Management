@@ -2,7 +2,23 @@
 const nextConfig = {
   images: {
     domains: [
-      'https://ulhcqtlntippncrflalk.supabase.co', // Replace with your Supabase project URL
+      'images.unsplash.com',
+      'ulhcqtlntippncrflalk.supabase.co',
+      'localhost',
+    ],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**.unsplash.com',
+        port: '',
+        pathname: '/photos/**',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.supabase.co',
+        port: '',
+        pathname: '/storage/**',
+      },
     ],
   },
 }
