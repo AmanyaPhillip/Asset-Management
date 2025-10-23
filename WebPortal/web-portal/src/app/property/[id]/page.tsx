@@ -3,7 +3,7 @@
 // File: src/app/property/[id]/page.tsx
 // =====================================================
 
-import { supabaseAdmin } from '@/lib/supabase/client'
+import { supabaseAdmin } from '@/lib/supabase/admin'
 import { Property } from '@/types/database'
 import { notFound } from 'next/navigation'
 import PropertyGallery from '@/components/properties/PropertyGallery'

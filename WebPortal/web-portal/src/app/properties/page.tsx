@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '@/lib/supabase/client'
+import { supabaseAdmin } from '@/lib/supabase/admin'
 import PropertyCard from '@/components/properties/PropertyCard'
 import { Property } from '@/types/database'
 

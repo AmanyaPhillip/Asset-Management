@@ -3,7 +3,7 @@
 // File: src/app/booking-success/page.tsx
 // =====================================================
 
-import { supabaseAdmin } from '@/lib/supabase/client'
+import { supabaseAdmin } from '@/lib/supabase/admin'
 import { CheckCircle, Calendar, MapPin, Car, Building2, MessageSquare } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -29,9 +29,10 @@ async function getBookingDetails(sessionId: string) {
 export default async function BookingSuccessPage({
   searchParams,
 }: {
-  searchParams: { session_id?: string }
+  searchParams: Promise<{ session_id?: string }>
 }) {
-  if (!searchParams.session_id) {
+  const params = await searchParams
+  if (!params.session_id) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-16 text-center">
         <p className="text-gray-600">Invalid booking session</p>
@@ -39,7 +40,7 @@ export default async function BookingSuccessPage({
     )
   }
 
-  const booking = await getBookingDetails(searchParams.session_id)
+  const booking = await getBookingDetails(params.session_id)
 
   if (!booking) {
     return (

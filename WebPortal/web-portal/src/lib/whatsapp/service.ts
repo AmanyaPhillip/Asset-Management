@@ -1,7 +1,6 @@
 // src/lib/whatsapp/service.ts
-import { supabaseAdmin } from '@/lib/supabase/client'
+import { supabaseAdmin } from '@/lib/supabase/admin'
 
-// Using Twilio as example - adjust for your provider
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID!
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN!
 const TWILIO_WHATSAPP_NUMBER = process.env.TWILIO_WHATSAPP_NUMBER!
@@ -10,16 +9,12 @@ export class WhatsAppService {
   private twilioClient: any
 
   constructor() {
-    // Initialize Twilio client
     if (typeof window === 'undefined') {
       const twilio = require('twilio')
       this.twilioClient = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
     }
   }
 
-  /**
-   * Send WhatsApp message
-   */
   async sendMessage(
     phoneNumber: string,
     message: string,
@@ -28,17 +23,15 @@ export class WhatsAppService {
     bookingId?: string
   ) {
     try {
-      // Format phone number (must include country code)
       const formattedNumber = this.formatPhoneNumber(phoneNumber)
 
-      // Send via Twilio
+      // CRITICAL FIX: Both from and to must have whatsapp: prefix
       const result = await this.twilioClient.messages.create({
-        from: TWILIO_WHATSAPP_NUMBER,
+        from: `whatsapp:${TWILIO_WHATSAPP_NUMBER.replace('whatsapp:', '')}`,
         to: `whatsapp:${formattedNumber}`,
         body: message,
       })
 
-      // Log message
       await supabaseAdmin.from('whatsapp_messages').insert({
         user_id: userId,
         phone_number: formattedNumber,
@@ -53,7 +46,6 @@ export class WhatsAppService {
     } catch (error: any) {
       console.error('WhatsApp send error:', error)
 
-      // Log failed message
       if (userId) {
         await supabaseAdmin.from('whatsapp_messages').insert({
           user_id: userId,
@@ -62,6 +54,7 @@ export class WhatsAppService {
           message_content: message,
           status: 'failed',
           booking_id: bookingId,
+          error_message: error.message,
         })
       }
 
@@ -69,19 +62,15 @@ export class WhatsAppService {
     }
   }
 
-  /**
-   * Generate and send OTP
-   */
   async sendOTP(phoneNumber: string) {
     const otp = this.generateOTP()
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000)
 
-    // Store OTP in database
     const { data: user } = await supabaseAdmin
       .from('users')
       .select('id')
       .eq('phone_number', phoneNumber)
-      .single()
+      .maybeSingle()
 
     if (user) {
       await supabaseAdmin
@@ -92,7 +81,6 @@ export class WhatsAppService {
         })
         .eq('id', user.id)
     } else {
-      // Create temporary user record
       await supabaseAdmin.from('users').insert({
         phone_number: phoneNumber,
         last_otp: otp,
@@ -106,9 +94,6 @@ export class WhatsAppService {
     return await this.sendMessage(phoneNumber, message, 'otp', user?.id)
   }
 
-  /**
-   * Verify OTP
-   */
   async verifyOTP(phoneNumber: string, otp: string) {
     const { data: user } = await supabaseAdmin
       .from('users')
@@ -128,7 +113,6 @@ export class WhatsAppService {
       return { success: false, error: 'OTP expired' }
     }
 
-    // Mark as verified
     await supabaseAdmin
       .from('users')
       .update({
@@ -142,11 +126,7 @@ export class WhatsAppService {
     return { success: true, userId: user.id }
   }
 
-  /**
-   * Send booking confirmation with dashboard link
-   */
   async sendBookingConfirmation(bookingId: string, phoneNumber: string) {
-    // Get booking details
     const { data: booking } = await supabaseAdmin
       .from('bookings')
       .select(`
@@ -161,10 +141,7 @@ export class WhatsAppService {
       throw new Error('Booking not found')
     }
 
-    // Generate magic link
     const magicLink = await this.generateMagicLink(booking.user_id)
-
-    // Format dates
     const startDate = new Date(booking.start_date).toLocaleDateString()
     const endDate = new Date(booking.end_date).toLocaleDateString()
 
@@ -197,9 +174,6 @@ Thank you for choosing Davidzo's Rentals! 🚗🏠`
     )
   }
 
-  /**
-   * Send dashboard access link
-   */
   async sendDashboardLink(userId: string, phoneNumber: string) {
     const magicLink = await this.generateMagicLink(userId)
 
@@ -220,12 +194,9 @@ Davidzo's Rentals`
     )
   }
 
-  /**
-   * Generate magic link for passwordless access
-   */
   async generateMagicLink(userId: string) {
     const token = this.generateSecureToken()
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
 
     await supabaseAdmin.from('magic_links').insert({
       user_id: userId,
@@ -237,14 +208,9 @@ Davidzo's Rentals`
     return `${baseUrl}/auth/magic?token=${token}`
   }
 
-  /**
-   * Helper: Format phone number
-   */
   private formatPhoneNumber(phoneNumber: string): string {
-    // Remove spaces, dashes, parentheses
     let cleaned = phoneNumber.replace(/[\s\-\(\)]/g, '')
 
-    // Add country code if missing (assuming US/Canada)
     if (!cleaned.startsWith('+')) {
       if (cleaned.length === 10) {
         cleaned = '+1' + cleaned
@@ -256,16 +222,10 @@ Davidzo's Rentals`
     return cleaned
   }
 
-  /**
-   * Helper: Generate 6-digit OTP
-   */
   private generateOTP(): string {
     return Math.floor(100000 + Math.random() * 900000).toString()
   }
 
-  /**
-   * Helper: Generate secure token
-   */
   private generateSecureToken(): string {
     const crypto = require('crypto')
     return crypto.randomBytes(32).toString('hex')

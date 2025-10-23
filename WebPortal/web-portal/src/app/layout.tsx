@@ -22,10 +22,17 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
+  const isDevelopment = process.env.NODE_ENV === 'development'
+
   return (
     <html lang="en">
       <body className={inter.className}>
         <AuthProvider>
+          {isDevelopment && (
+            <div className="bg-yellow-500 text-black text-center py-2 font-bold">
+              ⚠️ DEVELOPMENT MODE - NOT FOR PRODUCTION USE
+            </div>
+          )}
           <Navbar />
           <main className="min-h-screen bg-gray-50">
             {children}
@@ -36,4 +43,3 @@ export default function RootLayout({
     </html>
   )
 }
-

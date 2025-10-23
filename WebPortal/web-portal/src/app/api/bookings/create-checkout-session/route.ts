@@ -1,7 +1,7 @@
 // src/app/api/bookings/create-checkout-session/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
-import { supabaseAdmin } from '@/lib/supabase/client'
+import { supabaseAdmin } from '@/lib/supabase/admin'
 import { whatsappService } from '@/lib/whatsapp/service'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
@@ -58,11 +58,11 @@ export async function POST(req: NextRequest) {
     
     if (guestEmail) {
       // Try to find by email first
-      const { data: existingUser } = await supabaseAdmin
+      const { data: existingUser, error: emailLookupError } = await supabaseAdmin
         .from('users')
-        .select('id, phone_verified')
+        .select('id, phone_number')
         .eq('email', guestEmail)
-        .single()
+        .maybeSingle()
 
       if (existingUser) {
         userId = existingUser.id
@@ -75,31 +75,43 @@ export async function POST(req: NextRequest) {
             .eq('id', userId)
         }
       }
-    } else if (guestPhone) {
-      // Try to find by phone
-      const { data: existingUser } = await supabaseAdmin
+    }
+    
+    // If not found by email, try phone
+    if (!userId && guestPhone) {
+      const { data: existingUser, error: phoneLookupError } = await supabaseAdmin
         .from('users')
-        .select('id, phone_verified')
+        .select('id, email')
         .eq('phone_number', guestPhone)
-        .single()
+        .maybeSingle()
 
       if (existingUser) {
         userId = existingUser.id
+        
+        // Update email if provided and not already set
+        if (guestEmail && !existingUser.email) {
+          await supabaseAdmin
+            .from('users')
+            .update({ email: guestEmail })
+            .eq('id', userId)
+        }
       }
     }
 
     // Create new user if not found
     if (!userId) {
+      // Generate a UUID for the new user
       const { data: newUser, error: userError } = await supabaseAdmin
         .from('users')
-        .insert({
+        .insert([{
           email: guestEmail || null,
           phone_number: guestPhone || null,
           full_name: guestName,
           role: 'customer',
           phone_verified: false,
-        })
-        .select()
+          whatsapp_verified: false,
+        }])
+        .select('id')
         .single()
 
       if (userError) {
@@ -158,7 +170,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Create Stripe Checkout Session
-    const sessionConfig: any = {
+    const sessionConfig: Stripe.Checkout.SessionCreateParams = {
       mode: 'payment',
       payment_method_types: ['card'],
       line_items: [
@@ -181,17 +193,19 @@ export async function POST(req: NextRequest) {
         user_id: userId,
         phone_number: guestPhone || '',
         email: guestEmail || '',
+        guest_name: guestName,
       },
       success_url: `${process.env.NEXT_PUBLIC_APP_URL}/booking-success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/${assetType}/${assetId}`,
     }
 
-    // Add email or phone to Stripe session
+    // Add email if provided (Stripe only accepts customer_email, not phone)
     if (guestEmail) {
       sessionConfig.customer_email = guestEmail
-    } else if (guestPhone) {
-      sessionConfig.customer_phone = guestPhone
     }
+    
+    // Note: Stripe doesn't support customer_phone in checkout sessions
+    // Phone number is stored in metadata and our database instead
 
     const session = await stripe.checkout.sessions.create(sessionConfig)
 

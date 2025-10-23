@@ -3,7 +3,7 @@
 // File: src/app/vehicles/page.tsx
 // =====================================================
 
-import { supabaseAdmin } from '@/lib/supabase/client'
+import { supabaseAdmin } from '@/lib/supabase/admin'
 import VehicleCard from '@/components/vehicles/VehicleCard'
 import { Vehicle } from '@/types/database'
 

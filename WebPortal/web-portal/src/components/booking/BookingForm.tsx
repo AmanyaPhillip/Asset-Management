@@ -219,17 +219,16 @@ export default function BookingForm({
               value={guestName}
               onChange={(e) => setGuestName(e.target.value)}
               placeholder="John Doe"
-              required
             />
           </div>
 
           {/* Contact Information Header */}
-          <div className="pt-2">
+          <div className="pt-2 border-t">
             <Label className="text-sm font-semibold">
               Contact Information *
             </Label>
             <p className="text-xs text-gray-500 mt-1">
-              Provide at least one contact method
+              Provide at least one contact method (email or phone)
             </p>
           </div>
 
@@ -260,6 +259,7 @@ export default function BookingForm({
               value={guestPhone}
               onChange={handlePhoneChange}
               placeholder="(555) 123-4567"
+              maxLength={14}
             />
             {guestPhone && (
               <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">

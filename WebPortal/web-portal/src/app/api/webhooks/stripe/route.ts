@@ -67,6 +67,22 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     return
   }
 
+  // Fetch booking details FIRST
+  const { data: booking, error: fetchError } = await supabaseAdmin
+    .from('bookings')
+    .select(`
+      *,
+      properties (title, address, city, state),
+      vehicles (make, model)
+    `)
+    .eq('id', bookingId)
+    .single()
+
+  if (fetchError || !booking) {
+    console.error('Error fetching booking:', fetchError)
+    return
+  }
+
   // Update booking status to confirmed
   const { error: bookingError } = await supabaseAdmin
     .from('bookings')
@@ -84,7 +100,7 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     .insert({
       booking_id: bookingId,
       user_id: userId,
-      amount: (session.amount_total || 0) / 100, // Convert from cents
+      amount: (session.amount_total || 0) / 100,
       currency: session.currency || 'usd',
       status: 'succeeded',
       payment_method: 'card',
@@ -114,32 +130,43 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     await supabaseAdmin.from('notifications').insert(notifications)
   }
 
-  // Send WhatsApp confirmation
+  // Send WhatsApp confirmation if phone provided
   if (booking.guest_phone) {
-    await sendBookingConfirmation(booking.guest_phone, {
-      assetName: assetName,
-      startDate: booking.start_date,
-      endDate: booking.end_date,
-      amount: booking.total_amount
-    })
+    try {
+      const assetName =
+        booking.booking_type === 'property'
+          ? booking.properties?.title
+          : `${booking.vehicles?.make} ${booking.vehicles?.model}`
+
+      const startDate = new Date(booking.start_date).toLocaleDateString()
+      const endDate = new Date(booking.end_date).toLocaleDateString()
+
+      const message = `✅ *Payment Confirmed!*
+
+${assetName}
+
+📅 ${startDate} - ${endDate}
+💰 Paid: $${booking.total_amount.toFixed(2)}
+
+Your booking is now confirmed!
+
+Booking ID: ${bookingId.slice(0, 8)}
+
+Davidzo's Rentals`
+
+      await whatsappService.sendMessage(
+        booking.guest_phone,
+        message,
+        'booking_confirmation',
+        userId,
+        bookingId
+      )
+    } catch (whatsappError) {
+      console.error('WhatsApp error (non-critical):', whatsappError)
+    }
   }
 
   console.log(`Booking ${bookingId} confirmed successfully`)
-}
-
-async function handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
-  // Update payment record if needed
-  const { error } = await supabaseAdmin
-    .from('payments')
-    .update({
-      status: 'succeeded',
-      stripe_charge_id: paymentIntent.latest_charge as string,
-    })
-    .eq('stripe_payment_intent_id', paymentIntent.id)
-
-  if (error) {
-    console.error('Error updating payment:', error)
-  }
 }
 
 async function handlePaymentFailed(paymentIntent: Stripe.PaymentIntent) {
