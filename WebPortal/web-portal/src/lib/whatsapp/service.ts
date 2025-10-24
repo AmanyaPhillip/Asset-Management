@@ -1,4 +1,3 @@
-// src/lib/whatsapp/service.ts
 import { supabaseAdmin } from '@/lib/supabase/admin'
 
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID!
