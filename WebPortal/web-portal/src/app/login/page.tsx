@@ -186,7 +186,10 @@ export default function LoginPage() {
                   type="text"
                   placeholder="Enter 6-digit code"
                   value={otp}
-                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  onChange={(e) => {
+                                    const value = e.target.value || ''
+                                    const cleaned = value.replace(/\D/g, '').slice(0, 6) 
+                                  setOtp(cleaned)}}
                   maxLength={6}
                   className="text-center text-2xl tracking-widest"
                   required
