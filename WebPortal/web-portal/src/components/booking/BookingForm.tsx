@@ -113,9 +113,14 @@ export default function BookingForm({
     setIsLoading(true)
 
     try {
-      const response = await fetch('/api/bookings/create-checkout-session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch(
+  `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/create-checkout`,
+  {
+    method: 'POST',
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
+    },
         body: JSON.stringify({
           assetId,
           assetType,

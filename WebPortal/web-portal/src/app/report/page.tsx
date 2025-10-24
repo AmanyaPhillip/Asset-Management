@@ -1,11 +1,11 @@
 // =====================================================
-// PART 1: Damage Report Form Page
+// UPDATED: Damage Report Form Page with Suspense
 // File: src/app/report/page.tsx
 // =====================================================
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/providers/AuthProvider'
 import { supabase } from '@/lib/supabase/client'
@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { AlertCircle, Upload, X, Loader2 } from 'lucide-react'
 import Image from 'next/image'
 
-export default function ReportPage() {
+function ReportPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { user, loading: authLoading } = useAuth()
@@ -161,7 +161,7 @@ export default function ReportPage() {
         const notifications = managers.map((manager) => ({
           user_id: manager.id,
           title: 'New Damage Report',
-          message: `${user!.email} reported: ${title}`,
+          message: `User ${user?.id} reported: ${title}`,
           type: 'damage_report',
         }))
 
@@ -375,7 +375,14 @@ export default function ReportPage() {
   )
 }
 
-
-
-
-
+export default function ReportPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    }>
+      <ReportPageContent />
+    </Suspense>
+  )
+}

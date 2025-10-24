@@ -4,7 +4,7 @@
 // =====================================================
 
 'use client'
-
+import React from 'react'
 import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -143,7 +143,7 @@ function BookingCard({
   getStatusBadge,
 }: {
   booking: BookingWithDetails
-  getStatusBadge: (status: string) => JSX.Element
+  getStatusBadge: (status: string) => React.ReactElement
 }) {
   const asset =
     booking.booking_type === 'property' ? booking.properties : booking.vehicles
@@ -163,14 +163,17 @@ function BookingCard({
             <div>
               <CardTitle className="text-xl">
                 {booking.booking_type === 'property'
-                  ? asset?.title
-                  : `${asset?.make} ${asset?.model} ${asset?.year}`}
+                  ? booking.properties?.title
+                  : `${booking.vehicles?.make} ${booking.vehicles?.model} 
+                  ${booking.vehicles?.year}`}
               </CardTitle>
               {booking.booking_type === 'property' && asset && (
                 <div className="flex items-center text-sm text-gray-600 mt-1">
                   <MapPin className="w-4 h-4 mr-1" />
                   <span>
-                    {asset.address}, {asset.city}
+                    {booking.booking_type === 'property' 
+                      ? `${booking.properties?.address}, ${booking.properties?.city}`
+                      : null}
                   </span>
                 </div>
               )}

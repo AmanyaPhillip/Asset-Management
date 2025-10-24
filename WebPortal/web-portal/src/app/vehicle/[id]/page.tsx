@@ -89,13 +89,6 @@ export default async function VehicleDetailPage({
                 <span className="font-semibold capitalize">{vehicle.fuel_type}</span>
               </div>
             )}
-            {vehicle.mileage && (
-              <div className="flex flex-col items-center p-4 bg-gray-50 rounded-lg">
-                <Gauge className="w-6 h-6 text-blue-600 mb-2" />
-                <span className="text-sm text-gray-600">Mileage</span>
-                <span className="font-semibold">{vehicle.mileage.toLocaleString()} mi</span>
-              </div>
-            )}
           </div>
 
           <Separator />
@@ -122,22 +115,6 @@ export default async function VehicleDetailPage({
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-
-          {/* Maintenance Info */}
-          {vehicle.last_maintenance_date && (
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <p className="text-sm text-blue-900">
-                <strong>Last Maintenance:</strong>{' '}
-                {new Date(vehicle.last_maintenance_date).toLocaleDateString()}
-              </p>
-              {vehicle.next_maintenance_date && (
-                <p className="text-sm text-blue-900 mt-1">
-                  <strong>Next Maintenance:</strong>{' '}
-                  {new Date(vehicle.next_maintenance_date).toLocaleDateString()}
-                </p>
-              )}
             </div>
           )}
         </div>

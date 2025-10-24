@@ -14,6 +14,11 @@ export async function POST(req: NextRequest) {
       )
     }
 
+     if (!supabaseAdmin) {
+      console.error('Supabase admin client not initialized')
+      return NextResponse.redirect(new URL('/login?error=server_error', req.url))
+    }
+
     // Get user by phone
     const { data: user } = await supabaseAdmin
       .from('users')

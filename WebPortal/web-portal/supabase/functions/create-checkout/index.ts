@@ -1,15 +1,30 @@
-// src/app/api/bookings/create-checkout-session/route.ts
-import { NextRequest, NextResponse } from 'next/server'
-import Stripe from 'stripe'
-import { supabaseAdmin } from '@/lib/supabase/admin'
-import { whatsappService } from '@/lib/whatsapp/service'
+// supabase/functions/create-checkout/index.ts
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import Stripe from 'https://esm.sh/stripe@14.21.0'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-09-30.clover',
+const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
+  apiVersion: '2023-10-16',
+  httpClient: Stripe.createFetchHttpClient(),
 })
 
-export async function POST(req: NextRequest) {
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
+
   try {
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    )
+
     const body = await req.json()
     const {
       assetId,
@@ -24,22 +39,21 @@ export async function POST(req: NextRequest) {
 
     // Validate required fields
     if (!assetId || !assetType || !startDate || !endDate || !guestName) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
+      return new Response(
+        JSON.stringify({ error: 'Missing required fields' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // Validate that at least one contact method is provided
     if (!guestPhone && !guestEmail) {
-      return NextResponse.json(
-        { error: 'Either phone number or email is required' },
-        { status: 400 }
+      return new Response(
+        JSON.stringify({ error: 'Either phone number or email is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
     // Check availability
-    const { data: existingBookings } = await supabaseAdmin
+    const { data: existingBookings } = await supabase
       .from('bookings')
       .select('id')
       .eq(assetType === 'property' ? 'property_id' : 'vehicle_id', assetId)
@@ -47,18 +61,17 @@ export async function POST(req: NextRequest) {
       .or(`start_date.lte.${endDate},end_date.gte.${startDate}`)
 
     if (existingBookings && existingBookings.length > 0) {
-      return NextResponse.json(
-        { error: 'This asset is not available for the selected dates' },
-        { status: 400 }
+      return new Response(
+        JSON.stringify({ error: 'This asset is not available for the selected dates' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // Get or create user - prioritize by email if provided, then phone
+    // Get or create user
     let userId: string | null = null
     
     if (guestEmail) {
-      // Try to find by email first
-      const { data: existingUser, error: emailLookupError } = await supabaseAdmin
+      const { data: existingUser } = await supabase
         .from('users')
         .select('id, phone_number')
         .eq('email', guestEmail)
@@ -66,10 +79,8 @@ export async function POST(req: NextRequest) {
 
       if (existingUser) {
         userId = existingUser.id
-        
-        // Update phone if provided and not already set
         if (guestPhone && !existingUser.phone_number) {
-          await supabaseAdmin
+          await supabase
             .from('users')
             .update({ phone_number: guestPhone })
             .eq('id', userId)
@@ -77,9 +88,8 @@ export async function POST(req: NextRequest) {
       }
     }
     
-    // If not found by email, try phone
     if (!userId && guestPhone) {
-      const { data: existingUser, error: phoneLookupError } = await supabaseAdmin
+      const { data: existingUser } = await supabase
         .from('users')
         .select('id, email')
         .eq('phone_number', guestPhone)
@@ -87,10 +97,8 @@ export async function POST(req: NextRequest) {
 
       if (existingUser) {
         userId = existingUser.id
-        
-        // Update email if provided and not already set
         if (guestEmail && !existingUser.email) {
-          await supabaseAdmin
+          await supabase
             .from('users')
             .update({ email: guestEmail })
             .eq('id', userId)
@@ -100,25 +108,24 @@ export async function POST(req: NextRequest) {
 
     // Create new user if not found
     if (!userId) {
-      // Generate a UUID for the new user
-      const { data: newUser, error: userError } = await supabaseAdmin
+      const { data: newUser, error: userError } = await supabase
         .from('users')
-        .insert([{
+        .insert({
           email: guestEmail || null,
           phone_number: guestPhone || null,
           full_name: guestName,
           role: 'customer',
           phone_verified: false,
           whatsapp_verified: false,
-        }])
+        })
         .select('id')
         .single()
 
       if (userError) {
         console.error('Error creating user:', userError)
-        return NextResponse.json(
-          { error: 'Failed to create user account' },
-          { status: 500 }
+        return new Response(
+          JSON.stringify({ error: 'Failed to create user account' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
 
@@ -126,7 +133,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Create pending booking
-    const { data: booking, error: bookingError } = await supabaseAdmin
+    const { data: booking, error: bookingError } = await supabase
       .from('bookings')
       .insert({
         user_id: userId,
@@ -145,23 +152,23 @@ export async function POST(req: NextRequest) {
 
     if (bookingError) {
       console.error('Error creating booking:', bookingError)
-      return NextResponse.json(
-        { error: 'Failed to create booking' },
-        { status: 500 }
+      return new Response(
+        JSON.stringify({ error: 'Failed to create booking' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // Get asset details for Stripe description
+    // Get asset details
     let assetName = ''
     if (assetType === 'property') {
-      const { data: property } = await supabaseAdmin
+      const { data: property } = await supabase
         .from('properties')
         .select('title')
         .eq('id', assetId)
         .single()
       assetName = property?.title || 'Property Rental'
     } else {
-      const { data: vehicle } = await supabaseAdmin
+      const { data: vehicle } = await supabase
         .from('vehicles')
         .select('make, model')
         .eq('id', assetId)
@@ -170,6 +177,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Create Stripe Checkout Session
+    const appUrl = Deno.env.get('APP_URL') || 'http://localhost:3000'
+    
     const sessionConfig: Stripe.Checkout.SessionCreateParams = {
       mode: 'payment',
       payment_method_types: ['card'],
@@ -195,29 +204,26 @@ export async function POST(req: NextRequest) {
         email: guestEmail || '',
         guest_name: guestName,
       },
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/booking-success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/${assetType}/${assetId}`,
+      success_url: `${appUrl}/booking-success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${appUrl}/${assetType}/${assetId}`,
     }
 
-    // Add email if provided (Stripe only accepts customer_email, not phone)
     if (guestEmail) {
       sessionConfig.customer_email = guestEmail
     }
-    
-    // Note: Stripe doesn't support customer_phone in checkout sessions
-    // Phone number is stored in metadata and our database instead
 
     const session = await stripe.checkout.sessions.create(sessionConfig)
 
     // Update booking with session ID
-    await supabaseAdmin
+    await supabase
       .from('bookings')
       .update({ stripe_checkout_session_id: session.id })
       .eq('id', booking.id)
 
-    // Send initial notification
-    try {
-      const pendingMessage = `📋 *Booking Created*
+    // Send WhatsApp notification if phone provided
+    if (guestPhone) {
+      try {
+        const message = `📋 *Booking Created*
 
 ${assetName}
 
@@ -230,32 +236,38 @@ Booking ID: ${booking.id.slice(0, 8)}
 
 Davidzo's Rentals`
 
-      // Send WhatsApp if phone provided
-      if (guestPhone) {
-        await whatsappService.sendMessage(
-          guestPhone,
-          pendingMessage,
-          'booking_pending',
-          userId,
-          booking.id
-        )
+        // Call WhatsApp function
+        await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/send-whatsapp`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            phone: guestPhone,
+            message: message,
+            messageType: 'booking_pending',
+            userId: userId,
+            bookingId: booking.id
+          })
+        })
+      } catch (whatsappError) {
+        console.error('WhatsApp error (non-critical):', whatsappError)
       }
-
-      // TODO: Send email if email provided
-      // You can implement email sending here
-    } catch (notificationError) {
-      console.error('Notification error (non-critical):', notificationError)
     }
 
-    return NextResponse.json({
-      checkoutUrl: session.url,
-      bookingId: booking.id,
-    })
+    return new Response(
+      JSON.stringify({
+        checkoutUrl: session.url,
+        bookingId: booking.id,
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
   } catch (error: any) {
     console.error('Error creating checkout session:', error)
-    return NextResponse.json(
-      { error: error.message || 'Internal server error' },
-      { status: 500 }
+    return new Response(
+      JSON.stringify({ error: error.message || 'Internal server error' }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
-}
+})
