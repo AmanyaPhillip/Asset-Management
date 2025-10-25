@@ -35,53 +35,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const validateSession = async () => {
-    try {
-      // Get session token from localStorage
-      const sessionToken = localStorage.getItem('session_token')
-      
-      if (!sessionToken) {
-        setLoading(false)
-        return
-      }
-
-      // Validate session with database
-      const { data: session, error } = await supabase
-        .from('user_sessions')
-        .select(`
-          id,
-          user_id,
-          expires_at,
-          users (*)
-        `)
-        .eq('token', sessionToken)
-        .gte('expires_at', new Date().toISOString())
-        .single()
-
-      if (error || !session) {
-        // Invalid or expired session
-        console.error('Invalid session:', error)
-        localStorage.removeItem('session_token')
-        setUser(null)
-        setLoading(false)
-        return
-      }
-
-      // Update last_used_at
-      await supabase
-        .from('user_sessions')
-        .update({ last_used_at: new Date().toISOString() })
-        .eq('token', sessionToken)
-
-      // Set user from session
-      setUser(session.users as any)
+  try {
+    const sessionToken = localStorage.getItem('session_token')
+    
+    if (!sessionToken) {
       setLoading(false)
-    } catch (err) {
-      console.error('Session validation error:', err)
+      return
+    }
+
+    // First, get the session
+    const { data: session, error: sessionError } = await supabase
+      .from('user_sessions')
+      .select('user_id, expires_at')
+      .eq('token', sessionToken)
+      .gte('expires_at', new Date().toISOString())
+      .single()
+
+    if (sessionError || !session) {
+      console.error('Invalid session:', sessionError)
       localStorage.removeItem('session_token')
       setUser(null)
       setLoading(false)
+      return
     }
+
+    // Then, get the user separately
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', session.user_id)
+      .single()
+
+    if (userError || !userData) {
+      console.error('User not found:', userError)
+      localStorage.removeItem('session_token')
+      setUser(null)
+      setLoading(false)
+      return
+    }
+
+    // Update last_used_at
+    await supabase
+      .from('user_sessions')
+      .update({ last_used_at: new Date().toISOString() })
+      .eq('token', sessionToken)
+
+    // Set user
+    setUser(userData)
+    setLoading(false)
+  } catch (err) {
+    console.error('Session validation error:', err)
+    localStorage.removeItem('session_token')
+    setUser(null)
+    setLoading(false)
   }
+}
 
   const signOut = async () => {
     try {
