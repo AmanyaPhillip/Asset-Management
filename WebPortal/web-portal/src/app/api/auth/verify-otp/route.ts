@@ -6,6 +6,8 @@ export async function POST(req: NextRequest) {
   try {
     const { phoneNumber, otp } = await req.json()
 
+    console.log('Verify OTP request for:', phoneNumber)
+
     // Validate inputs
     if (!phoneNumber || !otp) {
       return NextResponse.json(
@@ -26,6 +28,7 @@ export async function POST(req: NextRequest) {
     }
 
     const formattedPhone = `+1${cleanedPhone}`
+    console.log('Formatted phone:', formattedPhone)
 
     // Find valid OTP
     const { data: otpRecord, error: otpError } = await supabaseAdmin
@@ -40,11 +43,14 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (otpError || !otpRecord) {
+      console.error('OTP validation failed:', otpError)
       return NextResponse.json(
         { error: 'Invalid or expired verification code' },
         { status: 400 }
       )
     }
+
+    console.log('OTP validated successfully')
 
     // Check attempts
     if (otpRecord.attempts >= 5) {
@@ -60,27 +66,44 @@ export async function POST(req: NextRequest) {
       .update({ verified: true })
       .eq('id', otpRecord.id)
 
+    console.log('OTP marked as verified')
+
     // Get or create user
     let user: any
 
-    const { data: existingUser } = await supabaseAdmin
+    const { data: existingUser, error: existingUserError } = await supabaseAdmin
       .from('users')
       .select('*')
       .eq('phone_number', formattedPhone)
-      .single()
+      .maybeSingle()
+
+    if (existingUserError) {
+      console.error('Error checking existing user:', existingUserError)
+      return NextResponse.json(
+        { error: 'Database error checking user' },
+        { status: 500 }
+      )
+    }
 
     if (existingUser) {
+      console.log('Existing user found:', existingUser.id)
       user = existingUser
       
       // Update verification status
-      await supabaseAdmin
+      const { error: updateError } = await supabaseAdmin
         .from('users')
         .update({ 
           phone_verified: true,
           whatsapp_verified: true 
         })
         .eq('id', existingUser.id)
+
+      if (updateError) {
+        console.error('Error updating user:', updateError)
+      }
     } else {
+      console.log('Creating new user for:', formattedPhone)
+      
       // Create new user
       const { data: newUser, error: userError } = await supabaseAdmin
         .from('users')
@@ -93,25 +116,42 @@ export async function POST(req: NextRequest) {
         .select()
         .single()
 
-      if (userError || !newUser) {
+      if (userError) {
+        console.error('User creation error:', userError)
         return NextResponse.json(
-          { error: 'Failed to create user account' },
+          { error: 'Failed to create user account: ' + userError.message },
           { status: 500 }
         )
       }
 
+      if (!newUser) {
+        console.error('No user returned after insert')
+        return NextResponse.json(
+          { error: 'Failed to create user account - no data returned' },
+          { status: 500 }
+        )
+      }
+
+      console.log('New user created:', newUser.id)
       user = newUser
     }
+
+    // Verify user object is valid
+    if (!user || !user.id) {
+      console.error('Invalid user object:', user)
+      return NextResponse.json(
+        { error: 'Invalid user state' },
+        { status: 500 }
+      )
+    }
+
+    console.log('User confirmed:', user.id)
 
     // Generate session token (cryptographically secure)
     const sessionToken = crypto.randomUUID()
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
 
-    // Delete any existing sessions for this user (optional - for single session per user)
-    // await supabaseAdmin
-    //   .from('user_sessions')
-    //   .delete()
-    //   .eq('user_id', user.id)
+    console.log('Creating session for user:', user.id)
 
     // Create new session
     const { error: sessionError } = await supabaseAdmin
@@ -125,10 +165,12 @@ export async function POST(req: NextRequest) {
     if (sessionError) {
       console.error('Session creation error:', sessionError)
       return NextResponse.json(
-        { error: 'Failed to create session' },
+        { error: 'Failed to create session: ' + sessionError.message },
         { status: 500 }
       )
     }
+
+    console.log('Session created successfully')
 
     // Return session token to client
     return NextResponse.json({ 
