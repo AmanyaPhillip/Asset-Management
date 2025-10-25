@@ -1,3 +1,4 @@
+// src/lib/twilio/whatsapp.ts
 import twilio from 'twilio'
 
 const accountSid = process.env.TWILIO_ACCOUNT_SID
@@ -12,15 +13,21 @@ const client = twilio(accountSid, authToken)
 
 export async function sendWhatsAppMessage(to: string, message: string) {
   try {
-    // Ensure phone number has whatsapp: prefix
-    const formattedTo = to.startsWith('whatsapp:') ? to : `whatsapp:${to}`
+    // CRITICAL: Both from and to MUST have whatsapp: prefix
+    // Remove any existing whatsapp: prefix first, then add it
+    const cleanTo = to.replace('whatsapp:', '')
+    const formattedTo = `whatsapp:${cleanTo.startsWith('+') ? cleanTo : '+' + cleanTo}`
+    
+    console.log('Sending WhatsApp from:', whatsappNumber)
+    console.log('Sending WhatsApp to:', formattedTo)
     
     const result = await client.messages.create({
       body: message,
-      from: whatsappNumber, // Already has whatsapp: prefix from env
-      to: formattedTo,
+      from: whatsappNumber, // Must be whatsapp:+14155238886
+      to: formattedTo,      // Must be whatsapp:+1234567890
     })
     
+    console.log('WhatsApp sent successfully:', result.sid)
     return { success: true, messageId: result.sid }
   } catch (error: any) {
     console.error('Twilio WhatsApp error:', error)

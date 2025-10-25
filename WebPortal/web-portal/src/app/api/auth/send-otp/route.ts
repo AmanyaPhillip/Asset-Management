@@ -1,3 +1,4 @@
+// src/app/api/auth/send-otp/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { sendWhatsAppMessage, generateOTP } from '@/lib/twilio/whatsapp'
@@ -24,11 +25,14 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // Format as +1234567890 (WITHOUT whatsapp: prefix - service will add it)
     const formattedPhone = `+1${cleanedPhone}`
 
     // Generate OTP
     const otpCode = generateOTP()
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
+
+    console.log('Generating OTP for:', formattedPhone)
 
     // Rate limiting - check for recent OTP
     const { data: existingOTP } = await supabaseAdmin
@@ -39,7 +43,7 @@ export async function POST(req: NextRequest) {
       .gte('expires_at', new Date().toISOString())
       .order('created_at', { ascending: false })
       .limit(1)
-      .single()
+      .maybeSingle()
 
     if (existingOTP) {
       const timeSinceLastOTP = Date.now() - new Date(existingOTP.created_at).getTime()
@@ -77,6 +81,7 @@ This code expires in 10 minutes.
 
 _Davidzo's Rentals_`
     
+    console.log('Sending WhatsApp OTP...')
     await sendWhatsAppMessage(formattedPhone, message)
 
     return NextResponse.json({ 
