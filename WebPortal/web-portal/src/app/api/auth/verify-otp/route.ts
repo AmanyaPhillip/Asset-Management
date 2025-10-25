@@ -64,23 +64,13 @@ export async function POST(req: NextRequest) {
 
     const { data: existingUser } = await supabaseAdmin
       .from('users')
-      .select('id')
+      .select('id, email')
       .eq('phone_number', formattedPhone)
       .single()
 
     if (existingUser) {
       userId = existingUser.id
-      
-      // Update verification status
-      await supabaseAdmin
-        .from('users')
-        .update({ 
-          phone_verified: true,
-          whatsapp_verified: true 
-        })
-        .eq('id', userId)
     } else {
-      // Create new user
       const { data: newUser, error: userError } = await supabaseAdmin
         .from('users')
         .insert({
@@ -102,11 +92,35 @@ export async function POST(req: NextRequest) {
       userId = newUser.id
     }
 
-    return NextResponse.json({ 
+    // CREATE A SESSION TOKEN
+    const sessionToken = crypto.randomUUID()
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+
+    // Store session in database (you'll need a sessions table)
+    await supabaseAdmin
+      .from('sessions')
+      .insert({
+        user_id: userId,
+        token: sessionToken,
+        expires_at: expiresAt.toISOString(),
+      })
+
+    // Set cookie
+    const response = NextResponse.json({ 
       success: true,
       userId: userId,
       message: 'Phone verified successfully'
     })
+
+    response.cookies.set('session_token', sessionToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      expires: expiresAt,
+      path: '/',
+    })
+
+    return response
   } catch (error: any) {
     console.error('Verify OTP error:', error)
     return NextResponse.json(
