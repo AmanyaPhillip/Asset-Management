@@ -1,42 +1,77 @@
 // src/app/api/auth/verify-otp/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { whatsappService } from '@/lib/whatsapp/service'
-import { cookies } from 'next/headers'
+import { supabaseAdmin } from '@/lib/supabase/admin'
 
 export async function POST(req: NextRequest) {
   try {
     const { phoneNumber, otp } = await req.json()
 
-    if (!phoneNumber || !otp) {
+    // Defensive coding - validate inputs
+    if (!phoneNumber || typeof phoneNumber !== 'string') {
       return NextResponse.json(
-        { error: 'Phone number and OTP are required' },
+        { error: 'Phone number is required' },
         { status: 400 }
       )
     }
 
-    const result = await whatsappService.verifyOTP(phoneNumber, otp)
-
-    if (!result.success) {
-      return NextResponse.json({ error: result.error }, { status: 400 })
+    if (!otp || typeof otp !== 'string') {
+      return NextResponse.json(
+        { error: 'OTP is required' },
+        { status: 400 }
+      )
     }
 
-    // Create session
-    const cookieStore = await cookies()
-    cookieStore.set('user_id', result.userId!, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7, // 7 days
+    // Clean inputs safely
+    const cleanedPhone = (phoneNumber || '').replace(/\D/g, '')
+    const cleanedOtp = (otp || '').replace(/\D/g, '')
+
+    if (cleanedOtp.length !== 6) {
+      return NextResponse.json(
+        { error: 'OTP must be 6 digits' },
+        { status: 400 }
+      )
+    }
+
+    // Format phone
+    let formattedPhone = phoneNumber.trim()
+    if (!formattedPhone.startsWith('+')) {
+      formattedPhone = `+1${cleanedPhone}`
+    }
+
+    // Check supabaseAdmin
+    if (!supabaseAdmin) {
+      console.error('Supabase admin client not initialized')
+      return NextResponse.json(
+        { error: 'Server configuration error' },
+        { status: 500 }
+      )
+    }
+
+    // Verify OTP (implement your verification logic)
+    // This is a placeholder - adjust based on your auth method
+    const { data, error } = await supabaseAdmin.auth.verifyOtp({
+      phone: formattedPhone,
+      token: cleanedOtp,
+      type: 'sms',
     })
 
-    return NextResponse.json({
+    if (error) {
+      console.error('OTP verification error:', error)
+      return NextResponse.json(
+        { error: error.message || 'Invalid or expired OTP' },
+        { status: 400 }
+      )
+    }
+
+    // Create session or return user data
+    return NextResponse.json({ 
       success: true,
-      userId: result.userId,
+      user: data.user 
     })
   } catch (error: any) {
     console.error('Verify OTP error:', error)
     return NextResponse.json(
-      { error: 'Failed to verify OTP' },
+      { error: error.message || 'Internal server error' },
       { status: 500 }
     )
   }
