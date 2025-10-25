@@ -1,6 +1,11 @@
 // src/app/api/auth/verify-otp/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase/admin'
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 export async function POST(req: NextRequest) {
   try {
@@ -38,18 +43,8 @@ export async function POST(req: NextRequest) {
       formattedPhone = `+1${cleanedPhone}`
     }
 
-    // Check supabaseAdmin
-    if (!supabaseAdmin) {
-      console.error('Supabase admin client not initialized')
-      return NextResponse.json(
-        { error: 'Server configuration error' },
-        { status: 500 }
-      )
-    }
-
-    // Verify OTP (implement your verification logic)
-    // This is a placeholder - adjust based on your auth method
-    const { data, error } = await supabaseAdmin.auth.verifyOtp({
+    // Verify OTP using Supabase Auth
+    const { data, error } = await supabase.auth.verifyOtp({
       phone: formattedPhone,
       token: cleanedOtp,
       type: 'sms',
@@ -63,9 +58,17 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Create session or return user data
+    if (!data.session) {
+      return NextResponse.json(
+        { error: 'Failed to create session' },
+        { status: 500 }
+      )
+    }
+
+    // Return session tokens
     return NextResponse.json({ 
       success: true,
+      session: data.session,
       user: data.user 
     })
   } catch (error: any) {
