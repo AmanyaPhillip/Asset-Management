@@ -1,32 +1,28 @@
-// =====================================================
-// Updated Auth Provider - WhatsApp/Phone Based
-// File: src/providers/AuthProvider.tsx
-// =====================================================
-
+// src/providers/AuthProvider.tsx
 'use client'
 
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
 
-type User = {
+interface User {
   id: string
-  phone_number: string
-  full_name: string | null
+  phone_number?: string
+  email?: string
+  full_name?: string
   role: string
-  phone_verified: boolean
+  phone_verified?: boolean
+  whatsapp_verified?: boolean
 }
 
-type AuthContextType = {
+interface AuthContextType {
   user: User | null
   loading: boolean
-  refreshUser: () => Promise<void>
   signOut: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
-  refreshUser: async () => {},
   signOut: async () => {},
 })
 
@@ -35,46 +31,96 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    checkUser()
+    validateSession()
   }, [])
 
-  const checkUser = async () => {
+  const validateSession = async () => {
     try {
-      // Check if there's a user_id in cookies (set by magic link or OTP verification)
-      const response = await fetch('/api/auth/session')
+      // Get session token from localStorage
+      const sessionToken = localStorage.getItem('session_token')
       
-      if (response.ok) {
-        const data = await response.json()
-        if (data.user) {
-          setUser(data.user)
-        }
+      if (!sessionToken) {
+        setLoading(false)
+        return
       }
-    } catch (error) {
-      console.error('Error checking user session:', error)
-    } finally {
+
+      // Validate session with database
+      const { data: session, error } = await supabase
+        .from('user_sessions')
+        .select(`
+          id,
+          user_id,
+          expires_at,
+          users (*)
+        `)
+        .eq('token', sessionToken)
+        .gte('expires_at', new Date().toISOString())
+        .single()
+
+      if (error || !session) {
+        // Invalid or expired session
+        console.error('Invalid session:', error)
+        localStorage.removeItem('session_token')
+        setUser(null)
+        setLoading(false)
+        return
+      }
+
+      // Update last_used_at
+      await supabase
+        .from('user_sessions')
+        .update({ last_used_at: new Date().toISOString() })
+        .eq('token', sessionToken)
+
+      // Set user from session
+      setUser(session.users as any)
+      setLoading(false)
+    } catch (err) {
+      console.error('Session validation error:', err)
+      localStorage.removeItem('session_token')
+      setUser(null)
       setLoading(false)
     }
   }
 
-  const refreshUser = async () => {
-    await checkUser()
-  }
-
   const signOut = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' })
+      const sessionToken = localStorage.getItem('session_token')
+      
+      if (sessionToken) {
+        // Delete session from database
+        await supabase
+          .from('user_sessions')
+          .delete()
+          .eq('token', sessionToken)
+      }
+
+      // Clear local storage
+      localStorage.removeItem('session_token')
+      setUser(null)
+      
+      // Redirect to login
+      window.location.href = '/login'
+    } catch (err) {
+      console.error('Sign out error:', err)
+      // Force logout even if error
+      localStorage.removeItem('session_token')
       setUser(null)
       window.location.href = '/login'
-    } catch (error) {
-      console.error('Error signing out:', error)
     }
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, refreshUser, signOut }}>
+    <AuthContext.Provider value={{ user, loading, signOut }}>
       {children}
     </AuthContext.Provider>
   )
 }
 
-export const useAuth = () => useContext(AuthContext)
+export const useAuth = () => {
+  const context = useContext(AuthContext)
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider')
+  }
+  return context
+}

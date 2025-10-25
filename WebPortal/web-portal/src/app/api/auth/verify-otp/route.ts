@@ -1,3 +1,4 @@
+// src/app/api/auth/verify-otp/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 
@@ -60,17 +61,27 @@ export async function POST(req: NextRequest) {
       .eq('id', otpRecord.id)
 
     // Get or create user
-    let userId: string
+    let user: any
 
     const { data: existingUser } = await supabaseAdmin
       .from('users')
-      .select('id, email')
+      .select('*')
       .eq('phone_number', formattedPhone)
       .single()
 
     if (existingUser) {
-      userId = existingUser.id
+      user = existingUser
+      
+      // Update verification status
+      await supabaseAdmin
+        .from('users')
+        .update({ 
+          phone_verified: true,
+          whatsapp_verified: true 
+        })
+        .eq('id', existingUser.id)
     } else {
+      // Create new user
       const { data: newUser, error: userError } = await supabaseAdmin
         .from('users')
         .insert({
@@ -79,7 +90,7 @@ export async function POST(req: NextRequest) {
           phone_verified: true,
           whatsapp_verified: true,
         })
-        .select('id')
+        .select()
         .single()
 
       if (userError || !newUser) {
@@ -89,38 +100,50 @@ export async function POST(req: NextRequest) {
         )
       }
 
-      userId = newUser.id
+      user = newUser
     }
 
-    // CREATE A SESSION TOKEN
+    // Generate session token (cryptographically secure)
     const sessionToken = crypto.randomUUID()
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
 
-    // Store session in database (you'll need a sessions table)
-    await supabaseAdmin
-      .from('sessions')
+    // Delete any existing sessions for this user (optional - for single session per user)
+    // await supabaseAdmin
+    //   .from('user_sessions')
+    //   .delete()
+    //   .eq('user_id', user.id)
+
+    // Create new session
+    const { error: sessionError } = await supabaseAdmin
+      .from('user_sessions')
       .insert({
-        user_id: userId,
+        user_id: user.id,
         token: sessionToken,
         expires_at: expiresAt.toISOString(),
       })
 
-    // Set cookie
-    const response = NextResponse.json({ 
+    if (sessionError) {
+      console.error('Session creation error:', sessionError)
+      return NextResponse.json(
+        { error: 'Failed to create session' },
+        { status: 500 }
+      )
+    }
+
+    // Return session token to client
+    return NextResponse.json({ 
       success: true,
-      userId: userId,
-      message: 'Phone verified successfully'
+      user: {
+        id: user.id,
+        phone_number: user.phone_number,
+        role: user.role,
+        full_name: user.full_name,
+      },
+      session: {
+        token: sessionToken,
+        expires_at: expiresAt.toISOString(),
+      }
     })
-
-    response.cookies.set('session_token', sessionToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      expires: expiresAt,
-      path: '/',
-    })
-
-    return response
   } catch (error: any) {
     console.error('Verify OTP error:', error)
     return NextResponse.json(

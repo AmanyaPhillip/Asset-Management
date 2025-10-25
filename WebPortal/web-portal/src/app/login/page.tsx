@@ -43,32 +43,37 @@ export default function LoginPage() {
     }
   }
 
-  const handleVerifyOTP = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    setIsLoading(true)
+ const handleVerifyOTP = async (e: React.FormEvent) => {
+  e.preventDefault()
+  setError('')
+  setIsLoading(true)
 
-    try {
-      const response = await fetch('/api/auth/verify-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phoneNumber, otp }),
-      })
+  try {
+    const response = await fetch('/api/auth/verify-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phoneNumber, otp }),
+    })
 
-      const data = await response.json()
+    const data = await response.json()
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to verify OTP')
-      }
-
-      // Redirect to bookings
-      router.push('/bookings')
-    } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setIsLoading(false)
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to verify OTP')
     }
+
+    // Store session token in localStorage
+    if (data.session?.token) {
+      localStorage.setItem('session_token', data.session.token)
+    }
+
+    // Redirect to bookings
+    window.location.href = '/bookings'
+  } catch (err: any) {
+    setError(err.message)
+  } finally {
+    setIsLoading(false)
   }
+}
 
   const handleRequestLink = async () => {
     setError('')
