@@ -1,17 +1,14 @@
-// =====================================================
-// Updated Booking Success Page - WhatsApp
-// File: src/app/booking-success/page.tsx
-// =====================================================
-
+// src/app/booking-success/page.tsx
 import { supabaseAdmin } from '@/lib/supabase/admin'
-import { CheckCircle, Calendar, MapPin, Car, Building2, MessageSquare } from 'lucide-react'
+import { CheckCircle, Calendar, MapPin, Car, Building2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { format } from 'date-fns'
+import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
 
 async function getBookingDetails(sessionId: string) {
-  // Get booking by session ID
   const { data: booking } = await supabaseAdmin
     .from('bookings')
     .select(`
@@ -32,6 +29,7 @@ export default async function BookingSuccessPage({
   searchParams: Promise<{ session_id?: string }>
 }) {
   const params = await searchParams
+  
   if (!params.session_id) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-16 text-center">
@@ -50,9 +48,21 @@ export default async function BookingSuccessPage({
     )
   }
 
-  const asset = booking.booking_type === 'property' 
-    ? booking.properties 
-    : booking.vehicles
+  // CRITICAL FIX: Set authentication cookie for the user
+  const cookieStore = await cookies()
+  const existingUserId = cookieStore.get('user_id')?.value
+
+  if (!existingUserId && booking.user_id) {
+    cookieStore.set('user_id', booking.user_id, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+    })
+  }
+
+  const asset =
+    booking.booking_type === 'property' ? booking.properties : booking.vehicles
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-16">
@@ -70,7 +80,6 @@ export default async function BookingSuccessPage({
 
       <Card>
         <CardContent className="p-6 space-y-6">
-          {/* Asset Info */}
           <div className="flex items-start space-x-4">
             <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
               {booking.booking_type === 'property' ? (
@@ -82,143 +91,62 @@ export default async function BookingSuccessPage({
             <div>
               <h2 className="font-semibold text-lg">
                 {booking.booking_type === 'property'
-                  ? asset.title
-                  : `${asset.make} ${asset.model}`}
+                  ? asset?.title
+                  : `${asset?.make} ${asset?.model}`}
               </h2>
-              {booking.booking_type === 'property' && (
-                <div className="flex items-center text-sm text-gray-600 mt-1">
+              {booking.booking_type === 'property' && asset?.address && (
+                <p className="text-sm text-gray-600 flex items-center mt-1">
                   <MapPin className="w-4 h-4 mr-1" />
-                  <span>{asset.address}, {asset.city}, {asset.state}</span>
-                </div>
+                  {asset.address}, {asset.city}
+                </p>
               )}
             </div>
           </div>
 
-          {/* Booking Details */}
-          <div className="border-t pt-4 space-y-3">
-            <div className="flex items-center justify-between">
+          <div className="border-t pt-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Check-in</p>
+                <p className="font-medium flex items-center">
+                  <Calendar className="w-4 h-4 mr-2" />
+                  {format(new Date(booking.start_date), 'MMM dd, yyyy')}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Check-out</p>
+                <p className="font-medium flex items-center">
+                  <Calendar className="w-4 h-4 mr-2" />
+                  {format(new Date(booking.end_date), 'MMM dd, yyyy')}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t pt-4">
+            <div className="flex justify-between items-center mb-2">
               <span className="text-gray-600">Booking ID</span>
               <span className="font-mono text-sm">{booking.id.slice(0, 8)}</span>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">Guest Name</span>
-              <span className="font-medium">{booking.guest_name}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">WhatsApp Number</span>
-              <span className="font-medium flex items-center gap-1">
-                <MessageSquare className="w-4 h-4 text-green-600" />
-                {booking.guest_phone}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">Check-in</span>
-              <div className="flex items-center">
-                <Calendar className="w-4 h-4 mr-2 text-gray-400" />
-                <span className="font-medium">
-                  {format(new Date(booking.start_date), 'MMM dd, yyyy')}
-                </span>
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">Check-out</span>
-              <div className="flex items-center">
-                <Calendar className="w-4 h-4 mr-2 text-gray-400" />
-                <span className="font-medium">
-                  {format(new Date(booking.end_date), 'MMM dd, yyyy')}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Payment Info */}
-          <div className="border-t pt-4">
-            <div className="flex items-center justify-between text-lg font-bold">
+            <div className="flex justify-between items-center text-lg font-semibold">
               <span>Total Paid</span>
-              <span className="text-blue-600">
-                ${booking.total_amount.toFixed(2)}
-              </span>
+              <span>${booking.total_amount.toFixed(2)}</span>
             </div>
           </div>
 
-          {/* WhatsApp Confirmation */}
-          <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-            <div className="flex items-start gap-3">
-              <MessageSquare className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium text-green-900 mb-1">
-                  WhatsApp Confirmation Sent!
-                </p>
-                <p className="text-xs text-green-800">
-                  A confirmation message with your booking details and dashboard access link has been sent to{' '}
-                  <span className="font-medium">{booking.guest_phone}</span>
-                </p>
-              </div>
+          {booking.special_requests && (
+            <div className="border-t pt-4">
+              <p className="text-sm text-gray-600 mb-1">Special Requests</p>
+              <p className="text-sm">{booking.special_requests}</p>
             </div>
-          </div>
+          )}
 
-          {/* Important Info */}
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <p className="text-sm text-blue-900 font-medium mb-2">
-              📱 Important Information:
-            </p>
-            <ul className="text-xs text-blue-800 space-y-1 ml-4">
-              <li>• Check your WhatsApp for booking confirmation</li>
-              <li>• You'll receive a dashboard link to view your booking anytime</li>
-              <li>• Save this link for future access to your bookings</li>
-              <li>• Contact us via WhatsApp if you need assistance</li>
-            </ul>
-          </div>
-
-          {/* Actions */}
-          <div className="flex gap-4 pt-4">
-            <Link href="/login" className="flex-1">
-              <Button className="w-full bg-green-600 hover:bg-green-700">
-                <MessageSquare className="w-4 h-4 mr-2" />
-                Access Dashboard
-              </Button>
-            </Link>
-            <Link href="/" className="flex-1">
-              <Button className="w-full" variant="outline">
-                Back to Home
-              </Button>
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Additional Info Card */}
-      <Card className="mt-6">
-        <CardContent className="p-6">
-          <h3 className="font-semibold mb-3 flex items-center gap-2">
-            <MessageSquare className="w-5 h-5 text-green-600" />
-            How to Access Your Booking
-          </h3>
-          <div className="space-y-3 text-sm text-gray-600">
-            <div className="flex items-start gap-3">
-              <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0 text-green-600 font-bold text-xs">
-                1
-              </div>
-              <p>Check your WhatsApp for the confirmation message</p>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0 text-green-600 font-bold text-xs">
-                2
-              </div>
-              <p>Click the dashboard link sent to you</p>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0 text-green-600 font-bold text-xs">
-                3
-              </div>
-              <p>View all your bookings and manage your reservations</p>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0 text-green-600 font-bold text-xs">
-                4
-              </div>
-              <p>Request a new link anytime using your WhatsApp number</p>
-            </div>
+          <div className="border-t pt-4 space-y-3">
+            <Button asChild className="w-full">
+              <Link href="/bookings">View My Bookings</Link>
+            </Button>
+            <Button asChild variant="outline" className="w-full">
+              <Link href="/">Return to Home</Link>
+            </Button>
           </div>
         </CardContent>
       </Card>
