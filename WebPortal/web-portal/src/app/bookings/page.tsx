@@ -1,83 +1,150 @@
-// =====================================================
-// Server Component - Bookings Page (UPDATED)
-// Fetches data server-side to bypass RLS
-// File: src/app/bookings/page.tsx
-// =====================================================
+'use client'
 
-import { cookies } from 'next/headers'
-import { redirect } from 'next/navigation'
-import { supabaseAdmin } from '@/lib/supabase/admin'
-import BookingsClient from '@/components/bookings/BookingsClient'
+import { useEffect, useState } from 'react'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { useRouter } from 'next/navigation'
+import { User } from '@supabase/supabase-js'
 
-type BookingWithDetails = {
+interface Property {
+  name: string
+  type: string
+  location: string
+}
+
+interface Vehicle {
+  make: string
+  model: string
+  year: number
+}
+
+interface Booking {
   id: string
+  user_id: string
   booking_type: 'property' | 'vehicle'
+  asset_id: string
   start_date: string
   end_date: string
-  total_amount: number
   status: string
+  total_amount: number
   created_at: string
-  properties?: { title: string; address: string; city: string; state: string }
-  vehicles?: { make: string; model: string; year: number }
+  properties?: Property
+  vehicles?: Vehicle
 }
 
-type User = {
-  id: string
-  phone_number: string
-  full_name: string | null
-  role: string
-  phone_verified: boolean
-}
+export default function BookingsPage() {
+  const [bookings, setBookings] = useState<Booking[]>([])
+  const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState<User | null>(null)
+  const supabase = createClientComponentClient()
+  const router = useRouter()
 
-async function getUser(): Promise<User | null> {
-  const cookieStore = await cookies()
-  const userId = cookieStore.get('user_id')?.value
+  useEffect(() => {
+    checkUser()
+  }, [])
 
-  if (!userId) {
-    return null
+  async function checkUser() {
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    
+    if (sessionError || !session) {
+      router.push('/login')
+      return
+    }
+
+    setUser(session.user)
+    
+    // Ensure user record exists
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('id', session.user.id)
+      .single()
+
+    if (userError || !userData) {
+      // Create user record if missing
+      await supabase.from('users').insert({
+        id: session.user.id,
+        email: session.user.email,
+        phone: session.user.phone,
+        role: 'guest'
+      })
+    }
+
+    fetchBookings(session.user.id)
   }
 
-  const { data: user, error } = await supabaseAdmin
-    .from('users')
-    .select('id, phone_number, full_name, role, phone_verified')
-    .eq('id', userId)
-    .single()
+  async function fetchBookings(userId: string) {
+    const { data, error } = await supabase
+      .from('bookings')
+      .select(`
+        *,
+        properties (name, type, location),
+        vehicles (make, model, year)
+      `)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
 
-  if (error) {
-    console.error('Error fetching user:', error)
-    return null
+    if (error) {
+      console.error('Fetch error:', error)
+    } else {
+      setBookings(data || [])
+    }
+    setLoading(false)
   }
 
-  return user
-}
-
-async function getBookings(userId: string): Promise<BookingWithDetails[]> {
-  const { data, error } = await supabaseAdmin
-    .from('bookings')
-    .select(`
-      *,
-      properties (title, address, city, state),
-      vehicles (make, model, year)
-    `)
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    console.error('Error fetching bookings:', error)
-    return []
+  if (loading) {
+    return <div className="flex items-center justify-center min-h-screen">Loading...</div>
   }
 
-  return data || []
-}
-
-export default async function BookingsPage() {
-  const user = await getUser()
-
-  if (!user) {
-    redirect('/login')
-  }
-
-  const bookings = await getBookings(user.id)
-
-  return <BookingsClient user={user} initialBookings={bookings} />
+  return (
+    <div className="container mx-auto px-4 py-8">
+      <h1 className="text-3xl font-bold mb-6">My Bookings</h1>
+      
+      {bookings.length === 0 ? (
+        <div className="text-center py-12">
+          <p className="text-gray-500 mb-4">No bookings found</p>
+          <button 
+            onClick={() => router.push('/properties')}
+            className="bg-blue-500 text-white px-6 py-2 rounded"
+          >
+            Browse Properties
+          </button>
+        </div>
+      ) : (
+        <div className="grid gap-4">
+          {bookings.map((booking) => (
+            <div key={booking.id} className="border rounded-lg p-4 shadow-sm">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="font-semibold text-lg">
+                    {booking.booking_type === 'property' 
+                      ? booking.properties?.name 
+                      : `${booking.vehicles?.make} ${booking.vehicles?.model}`}
+                  </h3>
+                  <p className="text-gray-600">
+                    {new Date(booking.start_date).toLocaleDateString()} - {new Date(booking.end_date).toLocaleDateString()}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-2">
+                    Status: <span className={`font-medium ${
+                      booking.status === 'confirmed' ? 'text-green-600' : 
+                      booking.status === 'pending' ? 'text-yellow-600' : 
+                      'text-gray-600'
+                    }`}>{booking.status}</span>
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold text-lg">${booking.total_amount}</p>
+                  <button 
+                    onClick={() => router.push(`/report?booking=${booking.id}`)}
+                    className="text-sm text-blue-500 hover:underline mt-2"
+                  >
+                    Report Issue
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
